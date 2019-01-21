@@ -16,5 +16,4 @@
 /vendor
 /logs
 /files
-*.toml
 *.log
