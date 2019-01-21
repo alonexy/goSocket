@@ -1,0 +1,22 @@
+debug = true
+timeout = 5
+[redis]
+    host = "127.0.0.1"
+    port = ":6379"
+    passwd = "123321"
+    db = 0
+
+[tcp]
+    bind = ":9991"
+    timeout = 10
+
+[websocket]
+    bind = ":9090"
+    tlsOpen = true
+    tlsBind = ":9091"
+    certFile = "./files/1_.crt"
+    privateFile = "./files/2_.key"
+
+[auth]
+    username = "alonexy"
+    passwd = "123456"
