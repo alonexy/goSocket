@@ -326,12 +326,12 @@ func ClientHeartTimer(conn net.Conn) chan bool {
 
 func Ping() []byte {
 	str := "PING"
-	BytesData, _ := php2go.JSONEncode(str)
-	return HeadJoin(BytesData)
+	BytesData,_ := PackData(str)
+	return BytesData
 }
 
 func Pong() []byte {
 	str := "PONG"
-	BytesData, _ := php2go.JSONEncode(str)
-	return HeadJoin(BytesData)
+	BytesData,_ := PackData(str)
+	return BytesData
 }
