@@ -68,12 +68,6 @@ func PackData(data string) ([]byte, error) {
 	return HeadJoin(BytesData), nil
 }
 
-// 解包
-func UnPackData(bytes []byte) (string, error) {
-
-	return ByteString(bytes), nil
-}
-
 func GetServerHeaertData() []byte {
 	return heart2;
 }
