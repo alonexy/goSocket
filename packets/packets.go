@@ -60,12 +60,18 @@ func HeadJoin(body []byte) []byte {
 }
 
 // 打包
-func PackData(data string) ([]byte, error) {
+func PackData(data interface{}) ([]byte, error) {
 	BytesData, err := php2go.JSONEncode(data)
 	if (err != nil) {
-		return []byte{}, nil
+		return []byte{}, err
 	}
 	return HeadJoin(BytesData), nil
+}
+
+// 解包
+func UnPackData(bytes []byte) (string, error) {
+
+	return ByteString(bytes), nil
 }
 
 func GetServerHeaertData() []byte {
@@ -154,23 +160,26 @@ func ServerRetDataHandle(conn *net.TCPConn, readerChannel chan string) {
 				Buffers.Read(DataHeaders)
 				BodyDatas := make([]byte, bodySize)
 				Buffers.Read(BodyDatas)
-				RetStr := ByteString(BodyDatas)
-				// 登录
-				if (strings.Contains(strings.ToLower(RetStr), "devid")) {
-					err := php2go.JSONDecode(StringByte(RetStr),&LoginDatas)
-					if(err != nil){
-						log.Println("DevId:[%v]---->Auth Is Err [%v]",LoginDatas.DevId,err)
-						return
+				if RetStr,err := UnPackData(BodyDatas);err!=nil{
+					log.Printf("UnPackData Err[%v]",err)
+				}else{
+					// 登录
+					if (strings.Contains(strings.ToLower(RetStr), "devid")) {
+						err := php2go.JSONDecode(StringByte(RetStr),&LoginDatas)
+						if(err != nil){
+							log.Println("DevId:[%v]---->Auth Is Err [%v]",LoginDatas.DevId,err)
+							return
+						}
+						if(LoginDatas.Token  == Token(conf.Conf.Auth.PassWd,LoginDatas.LoginTime,conf.Conf.Auth.UserName,LoginDatas.DevId)){
+							conn.Write(GetLoginSucData())
+							log.Printf("DevId:[%v]---->Auth SUC",LoginDatas.DevId)
+						}else{
+							log.Printf("DevId:[%v]---->Auth Fail",LoginDatas.DevId)
+							return
+						}
 					}
-					if(LoginDatas.Token  == Token(conf.Conf.Auth.PassWd,LoginDatas.LoginTime,conf.Conf.Auth.UserName,LoginDatas.DevId)){
-						conn.Write(GetLoginSucData())
-						log.Printf("DevId:[%v]---->Auth SUC",LoginDatas.DevId)
-					}else{
-						log.Printf("DevId:[%v]---->Auth Fail",LoginDatas.DevId)
-						return
-					}
+					readerChannel <- RetStr
 				}
-				readerChannel <- RetStr
 			}
 
 		}
@@ -204,7 +213,6 @@ func ClientRetDataHandle(conn net.Conn, readerChannel chan string) {
 				conn.Write(GetClientPassiveHeaertData())
 				continue
 			}
-			log.Println(buf[:n])
 			Buffers.Write(buf[:n])
 			tmpBytes := Buffers.Bytes()[:5] // 临时查看body长度 不进行读取
 			// header：1-3-3-bodysize/256-bodySize%256 body
@@ -226,7 +234,11 @@ func ClientRetDataHandle(conn net.Conn, readerChannel chan string) {
 				Buffers.Read(DataHeaders)
 				BodyDatas := make([]byte, bodySize)
 				Buffers.Read(BodyDatas)
-				readerChannel <- ByteString(BodyDatas)
+				if RetStr,err := UnPackData(BodyDatas);err!=nil{
+					log.Printf("UnPackData Err[%v]",err)
+				}else{
+					readerChannel <- RetStr
+				}
 			}
 
 		}
@@ -261,8 +273,13 @@ func GetLoginData(uname string, passwd string) []byte {
 	data["LoginTime"] = loginTime
 	data["DevId"] = DevId
 	data["Token"] = Token(passwd,loginTime,uname,DevId)
-	BytesData, _ := php2go.JSONEncode(data)
-	return HeadJoin(BytesData)
+
+	BytesData ,err := PackData(data)
+	if(err != nil){
+		log.Println("GetLoginData",err)
+		return []byte{}
+	}
+	return BytesData
 }
 
 //心跳定时器
