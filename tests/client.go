@@ -11,7 +11,7 @@ import (
 func ClienTest(){
 	log.Println("clients  start")
 	wg := &sync.WaitGroup{}
-	for ii:=0;ii<100;ii++ {
+	for ii:=0;ii<10;ii++ {
 		wg.Add(1)
 		go func(wgg *sync.WaitGroup) {
 			defer wgg.Done()

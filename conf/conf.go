@@ -15,6 +15,7 @@ var (
 
 type Config struct {
 	Debug     bool
+	LogName   string `toml:LogName`
 	Timeout   int
 	Redis     *Redis
 	WebSocket *WebSocket
