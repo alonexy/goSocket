@@ -15,13 +15,14 @@ import (
 )
 
 var (
-	// client 被动发送 server 判断头
+	// client send heart hearder
 	heart1 = []byte{2, 1, 3, 0, 0}
-	// client ／ server  定时发送  发送
+	// client ／ server  -crontab heart header
 	heart2 = []byte{1, 1, 3, 0, 0}
-	// 登录成功发送
-	heart3 = []byte{2, 2, 3, 0,66}
-	LoginDatas  = Login{}
+	// login suc send header
+	heart3 = []byte{2, 2, 3, 0, 66}
+
+	LoginDatas = Login{}
 )
 
 type Login struct {
@@ -44,8 +45,7 @@ func StringByte(s string) []byte {
 	}
 	return *(*[]byte)(unsafe.Pointer(&bh))
 }
-
-// 数据包 头部处理
+// packet header handler
 func HeadJoin(body []byte) []byte {
 	var buffer bytes.Buffer
 	defer func() {
@@ -59,7 +59,13 @@ func HeadJoin(body []byte) []byte {
 	return buffer.Bytes()
 }
 
-// 打包
+type ReaderMsgType struct {
+	Tc *net.TCPConn
+	Msg string
+}
+
+
+// data pack 
 func PackData(data interface{}) ([]byte, error) {
 	BytesData, err := php2go.JSONEncode(data)
 	if (err != nil) {
@@ -68,7 +74,7 @@ func PackData(data interface{}) ([]byte, error) {
 	return HeadJoin(BytesData), nil
 }
 
-// 解包
+// data unpack
 func UnPackData(bytes []byte) (string, error) {
 
 	return ByteString(bytes), nil
@@ -87,7 +93,7 @@ func GetClientPassiveHeaertData() []byte {
 	return heart1;
 }
 
-// 判断是否是心跳
+// Is Server Heart
 func IsHeartS(heart []byte) bool {
 	heartRes1 := bytes.Compare(heart, heart1)
 	heartRes2 := bytes.Compare(heart, heart2)
@@ -107,7 +113,7 @@ func IsHeartC(heart []byte) bool {
 	return false
 }
 
-//检测是否登录成功
+//check login  
 func ClientCheckSuclogin(login []byte) bool {
 	//2 2 3 0 66
 	loginHeader := []byte{2, 2, 3, 0, 66}
@@ -119,8 +125,8 @@ func ClientCheckSuclogin(login []byte) bool {
 	}
 }
 
-// 收到的数据整合
-func ServerRetDataHandle(conn *net.TCPConn, readerChannel chan string) {
+// server retData Hander
+func ServerRetDataHandle(conn *net.TCPConn, readerChannel chan<- ReaderMsgType) {
 	buf := make([]byte, 1024)
 	Buffers := bytes.NewBuffer([]byte{})
 	defer func() {
@@ -129,9 +135,10 @@ func ServerRetDataHandle(conn *net.TCPConn, readerChannel chan string) {
 	}()
 	for {
 		if n, err := conn.Read(buf); err != nil {
-			log.Printf("读取数据失败 >>>>> 错误信息:%v", err)
+			log.Printf("recvData Fail >>>>> ErrMsg :%v", err)
 			return
 		} else {
+			//binary.Read(Buffers,binary.BigEndian,buf)
 			if (len(buf) == 0) {
 				continue
 			}
@@ -160,25 +167,29 @@ func ServerRetDataHandle(conn *net.TCPConn, readerChannel chan string) {
 				Buffers.Read(DataHeaders)
 				BodyDatas := make([]byte, bodySize)
 				Buffers.Read(BodyDatas)
-				if RetStr,err := UnPackData(BodyDatas);err!=nil{
-					log.Printf("UnPackData Err[%v]",err)
-				}else{
-					// 登录
+				if RetStr, err := UnPackData(BodyDatas); err != nil {
+					log.Printf("UnPackData Err[%v]", err)
+				} else {
+					// TODO 简单写
 					if (strings.Contains(strings.ToLower(RetStr), "devid")) {
-						err := php2go.JSONDecode(StringByte(RetStr),&LoginDatas)
-						if(err != nil){
-							log.Println("DevId:[%v]---->Auth Is Err [%v]",LoginDatas.DevId,err)
+						err := php2go.JSONDecode(StringByte(RetStr), &LoginDatas)
+						if (err != nil) {
+							log.Println("DevId:[%v]---->Auth Is Err [%v]", LoginDatas.DevId, err)
 							return
 						}
-						if(LoginDatas.Token  == Token(conf.Conf.Auth.PassWd,LoginDatas.LoginTime,conf.Conf.Auth.UserName,LoginDatas.DevId)){
+						if (LoginDatas.Token == Token(conf.Conf.Auth.PassWd, LoginDatas.LoginTime, conf.Conf.Auth.UserName, LoginDatas.DevId)) {
 							conn.Write(GetLoginSucData())
-							log.Printf("DevId:[%v]---->Auth SUC",LoginDatas.DevId)
-						}else{
-							log.Printf("DevId:[%v]---->Auth Fail",LoginDatas.DevId)
+							log.Printf("DevId:[%v]---->Auth SUC", LoginDatas.DevId)
+						} else {
+							log.Printf("DevId:[%v]---->Auth Fail", LoginDatas.DevId)
 							return
 						}
 					}
-					readerChannel <- RetStr
+					ReaderMsgData := ReaderMsgType{}
+					ReaderMsgData.Tc = conn
+					ReaderMsgData.Msg = RetStr
+
+					readerChannel<- ReaderMsgData
 				}
 			}
 
@@ -186,6 +197,7 @@ func ServerRetDataHandle(conn *net.TCPConn, readerChannel chan string) {
 
 	}
 }
+// Client Test Func---
 func ClientRetDataHandle(conn net.Conn, readerChannel chan string) {
 	buf := make([]byte, 1024)
 	Buffers := bytes.NewBuffer([]byte{})
@@ -197,7 +209,7 @@ func ClientRetDataHandle(conn net.Conn, readerChannel chan string) {
 	}()
 	for {
 		if n, err := conn.Read(buf); err != nil {
-			log.Printf("读取数据失败 >>>>> 错误信息:%v", err)
+			log.Printf("Client Recv Data >>>>> ErrMsg :%v", err)
 			return
 		} else {
 			if (len(buf) == 0) {
@@ -205,8 +217,18 @@ func ClientRetDataHandle(conn net.Conn, readerChannel chan string) {
 			}
 			// Client
 			if (ClientCheckSuclogin(buf[:5])) {
-				log.Println("LOGIN IS SUC")
-				conn.Write(GetClientPassiveHeaertData())
+				log.Println("Login Is Suc")
+				//conn.Write(GetClientPassiveHeaertData())
+				tticker := time.NewTicker(time.Duration(conf.Conf.Timeout) * time.Second)
+				go func(tticker *time.Ticker) {
+					defer tticker.Stop()
+					for {
+						select {
+						case <-tticker.C:
+							conn.Write(GetClientPassiveHeaertData())
+						}
+					}
+				}(tticker)
 				continue
 			}
 			if (IsHeartC(buf[:5])) {
@@ -234,9 +256,9 @@ func ClientRetDataHandle(conn net.Conn, readerChannel chan string) {
 				Buffers.Read(DataHeaders)
 				BodyDatas := make([]byte, bodySize)
 				Buffers.Read(BodyDatas)
-				if RetStr,err := UnPackData(BodyDatas);err!=nil{
-					log.Printf("UnPackData Err[%v]",err)
-				}else{
+				if RetStr, err := UnPackData(BodyDatas); err != nil {
+					log.Printf("UnPackData Err[%v]", err)
+				} else {
 					readerChannel <- RetStr
 				}
 			}
@@ -245,9 +267,7 @@ func ClientRetDataHandle(conn net.Conn, readerChannel chan string) {
 
 	}
 }
-
-// 整合数据读取
-func Reader(readerChannel chan string) {
+func ClientReader(readerChannel <-chan string) {
 	for {
 		select {
 		case data := <-readerChannel:
@@ -257,14 +277,27 @@ func Reader(readerChannel chan string) {
 		}
 	}
 }
+// Server整合数据读取
+func ServerReader(readerChannel chan ReaderMsgType) {
+	for {
+		select {
+		case data := <-readerChannel:
+			if (!php2go.Empty(data)) {
+				log.Println(data.Msg)
+
+			}
+		}
+	}
+}
 func GetUid() string {
 	UUid, _ := uuid.NewRandom()
 	return fmt.Sprintf("%s", UUid)
 }
-func Token(passwd string, loginTime string ,uname string, DevId string) string{
+func Token(passwd string, loginTime string, uname string, DevId string) string {
 	return php2go.Md5(passwd + loginTime + uname + DevId);
 }
-// 获取登录信息
+
+// get login data
 func GetLoginData(uname string, passwd string) []byte {
 	loginTime := fmt.Sprintf("%v", time.Now().Format("2006-01-02 15:04:05"))
 	DevId := GetUid()
@@ -272,11 +305,12 @@ func GetLoginData(uname string, passwd string) []byte {
 	data["UserName"] = uname
 	data["LoginTime"] = loginTime
 	data["DevId"] = DevId
-	data["Token"] = Token(passwd,loginTime,uname,DevId)
+	data["Token"] = Token(passwd, loginTime, uname, DevId)
+	data["Action"] = "login"
 
-	BytesData ,err := PackData(data)
-	if(err != nil){
-		log.Println("GetLoginData",err)
+	BytesData, err := PackData(data)
+	if (err != nil) {
+		log.Println("GetLoginData", err)
 		return []byte{}
 	}
 	return BytesData
@@ -292,7 +326,7 @@ func ServerHeartTimer(conn *net.TCPConn) chan bool {
 			select {
 			case <-ticker.C:
 				conn.Write(GetServerHeaertData())
-				log.Printf("Server Timer heart at %v\r\n", time.Now().Format("2006-01-02 15:04:05"))
+				log.Printf("Server Timer Send heart at %v\r\n", time.Now().Format("2006-01-02 15:04:05"))
 			case stop := <-stopChan:
 				if stop {
 					log.Println("Server Timer Stop")
@@ -312,7 +346,7 @@ func ClientHeartTimer(conn net.Conn) chan bool {
 			select {
 			case <-ticker.C:
 				conn.Write(GetClientHeaertData())
-				log.Printf("Client Timer heart at %v\r\n", time.Now().Format("2006-01-02 15:04:05"))
+				log.Printf("Client Timer Send heart at %v\r\n", time.Now().Format("2006-01-02 15:04:05"))
 			case stop := <-stopChan:
 				if stop {
 					log.Println("Client Timer Stop")
@@ -326,12 +360,17 @@ func ClientHeartTimer(conn net.Conn) chan bool {
 
 func Ping() []byte {
 	str := "PING"
-	BytesData,_ := PackData(str)
+	BytesData, _ := PackData(str)
 	return BytesData
 }
 
 func Pong() []byte {
 	str := "PONG"
-	BytesData,_ := PackData(str)
+	BytesData, _ := PackData(str)
+	return BytesData
+}
+func T() []byte {
+	str := "T"
+	BytesData, _ := PackData(str)
 	return BytesData
 }

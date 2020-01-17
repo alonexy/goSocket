@@ -1,10 +1,9 @@
 debug = true
 timeout = 5
 [redis]
-    host = "127.0.0.1"
-    port = ":6379"
-    passwd = "123321"
-    db = 0
+    address = "127.0.0.1:6379"
+    auth = "alonexy"
+    type = "tcp"
 
 [tcp]
     bind = ":9991"

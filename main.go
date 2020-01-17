@@ -4,45 +4,29 @@ import (
 	"flag"
 	"fmt"
 	"github.com/alonexy/acps/conf"
-	"github.com/alonexy/acps/logger"
 	"github.com/alonexy/acps/packets"
 	"github.com/alonexy/acps/tests"
 	"log"
 	"net"
 	"os"
 	"os/signal"
-	"sync"
 	"syscall"
 	"time"
 )
 
-// WaitGroupWrapper WaitGroupWrapper
-type WaitGroupWrapper struct {
-	sync.WaitGroup
-}
-
-// Wrap Wrap
-func (w *WaitGroupWrapper) Wrap(fn func()) {
-	w.Add(1)
-	go func() {
-		defer w.Done()
-		fn()
-	}()
-}
-func init() {
-	logger.InitLogging("test_server.log", 0)
-}
-func main() {
+func init()  {
 	flag.Parse()
 	if err := conf.Init(); err != nil {
 		panic(err)
 	}
+	log.SetPrefix("[GoSocket :: -->] ")
+	log.SetFlags(log.LstdFlags | log.Ldate | log.Lmicroseconds | log.Lshortfile)
+}
+func main() {
 	if (conf.ClientTest) {
 		tests.ClienTest()
 	} else {
-		//ctx, cancel := context.WithCancel(context.Background())
-		//
-		//wg := &WaitGroupWrapper{}
+
 		signChan := make(chan os.Signal)
 		signal.Notify(signChan, os.Interrupt, os.Kill, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
@@ -50,7 +34,7 @@ func main() {
 		if (err != nil) {
 			panic(err)
 		}
-		log.Printf("Listen --->>%v",localAddress)
+		log.Printf("TCP Listen Port --->>%v",localAddress)
 		tcpListener, err := net.ListenTCP("tcp4", localAddress)
 		if err != nil {
 			panic(err)
@@ -63,22 +47,21 @@ func main() {
 			for s := range signChan {
 				switch s {
 				case syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT:
-					fmt.Println("退出", s)
-					os.Exit(0)
+					fmt.Println("Quit[1]", s)
+					os.Exit(1)
 				default:
-					fmt.Println("other", s)
-					os.Exit(0)
+					fmt.Println("Quit[2]", s)
+					os.Exit(2)
 				}
 			}
 		}()
-		//声明一个管道用于接收解包的数据
-		readerChannel := make(chan string, 1)
+		readerChannel := make(chan packets.ReaderMsgType, 100)
 		go func() {
-			go packets.Reader(readerChannel)
+			go packets.ServerReader(readerChannel)
 		}()
 		for {
 			if TcpConn, err := tcpListener.AcceptTCP(); err != nil {
-				log.Println("接受连接失败", err)
+				log.Println("AcceptFail:", err)
 				continue
 			} else {
 				go handleAccepts(TcpConn, readerChannel)
@@ -91,10 +74,9 @@ func main() {
 
 }
 
-func handleAccepts(conn *net.TCPConn, readerChannel chan string) {
+func handleAccepts(conn *net.TCPConn, readerChannel chan packets.ReaderMsgType) {
 	log.Printf("%v--->>connect success", conn.RemoteAddr())
 	conn.Write(packets.Pong())
-	//设置了超时，当一定时间内客户端无请求发送，conn便会自动关闭，
 	conn.SetDeadline(time.Now().Add(time.Duration(conf.Conf.TCP.Timeout) * time.Second))
 	ch := packets.ServerHeartTimer(conn)
 	packets.ServerRetDataHandle(conn, readerChannel)

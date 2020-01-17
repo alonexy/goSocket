@@ -29,10 +29,9 @@ type Auth struct {
 
 // Redis Conf
 type Redis struct {
-	Host   string
-	Port   string
-	Passwd string
-	Db     int
+	Address string
+	Auth    string
+	Type    string
 }
 
 // Websocket Conf
@@ -51,8 +50,8 @@ type TCP struct {
 }
 
 func init() {
-	flag.BoolVar(&ClientTest, "tests", false, "开启client测试")
-	flag.StringVar(&confPath, "conf", "conf-example.toml", "配置文件地址")
+	flag.StringVar(&confPath, "conf", "conf-example.toml", "conf file path .")
+	flag.BoolVar(&ClientTest, "tests", false, "Open client test .")
 }
 
 // Init init conf.

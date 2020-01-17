@@ -12,6 +12,7 @@
 *.out
 
 /.idea
+/.vscode
 /.svn
 /vendor
 /logs
